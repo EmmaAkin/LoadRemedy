@@ -35,7 +35,10 @@ finally:
 with open('location.json') as json_data:
 	dataLoc =json.load(json_data)
 
-keys = list(dataLoc.keys())
+siteKeys = list(dataLoc.keys())
+
+with open('abs.json') as json_data:
+	dataAb =json.load(json_data)
 
 
 
@@ -59,7 +62,7 @@ dataF.drop(["Day", "User ID", "Comment", "Serial Number", "IS-Tag(Old)"], axis=1
 
 #Rename the different colum of the prep Sheet to reflect what is on Remedy
 
-dataF1 = dataF.rename(columns={"IS tag(New)":"IS Tag", "Device S/No":"Serial Number", "Contact":"Phone Number", "Date":"Date Deployed", "Remark":"CurrentState"})
+dataF1 = dataF.rename(columns={"IS-Tag(New)":"TagNumber", "Device S/No":"SerialNumber", "Contact":"PartNumber", "Date":"InstallationDate", "Remark":"AssetLifecycleStatus","Device":"Item","Department":"Room"})
 
 
 ##Hostname is the combination of the site abbreviation (Determined by the location for instance for location from connect store start with CS and connection 
@@ -68,7 +71,27 @@ dataF1 = dataF.rename(columns={"IS tag(New)":"IS Tag", "Device S/No":"Serial Num
 
 #using a formula  --http://stackoverflow.com/questions/21263020/pandas-update-value-if-condition-in-3-columns-are-met
 #
-def hostname(rowData):
+def hostname( site,istag, item):
+	# Get the site abbreviation
+	itemLT = re.compile('Lap.*', re.IGNORECASE)
+	itemDT = re.compile('Des.*(?!Moni.*)', re.IGNORECASE)
+	
+	if itemLT.match(item)!=None:
+		
+		istag = (re.findall(r'\d+',str(istag)))
+		
+		result = dataAb[site] + istag[0] + "LT"
+		print (result)
+		return result
+
+
+	elif itemDT.match(str(item))!=None:
+		print (site)
+		print(re.findall(r'\d+',str(istag)))
+		return "DT"
+	else:
+		return "Na"
+
 	
 	# Get the value of the row and remove the numbers
 
@@ -85,19 +108,24 @@ def getLoc(data):
 		location = "Falomo"
 		region = "Lagos"
 		# We can use the department to determine the floor that the User would be on
+
 		floor = re.findall(r'\d+',str(data))
-		print(type(re.findall(r'\d+',str(data))))
+		#print(type(re.findall(r'\d+',str(data))))
+		if len(floor)==0:
+			floor = "Na"
+		else:
+			floor = floor[0]
 		return [site,floor, location,region]
 	
-	for key in keys:
+	for key in siteKeys:
 		count = count +1
 
 
 		
 		if (re.compile(str(key)+".*", re.IGNORECASE)).match(str(data))!=None:
 				# I could get the right location of the system
-				# Using the re to remove the for example
-				# Go.*P could become Gop
+				# Using the re to remove the for exampleou
+				# Go.*P could become G
 			#print(dataLoc["Golden Plaza"])    
 
 			site = dataLoc[key]["Site"]  #There could be an improvement here by making the reg exp take the match and find the correct site name
@@ -106,7 +134,7 @@ def getLoc(data):
             
 			return [site,"Na", location, region]
 
-		elif(count>=len(keys)):
+		elif(count>=len(siteKeys)):
 			return ["Na", "Na", "Na", "Na"]
 		
 		else:continue
@@ -118,13 +146,15 @@ def getLoc(data):
 
 #print(df)
 
-print(type(dataF1["Location"]))
-
 dataF1['Site'], dataF1["Floor"], dataF1["ActualLocation"], dataF1["Region"] = zip(*dataF1["Location"].map(getLoc))
 
-print(dataF1)
+dataF1['Name'] = dataF1.apply(lambda row: hostname(row['Site'], row['TagNumber'], row['Item']), axis=1)
 
 
+
+writer = pd.ExcelWriter('output.xlsx')
+dataF1.to_excel(writer,'Sheet1')
+writer.save()
 #Cleaning the dataframe
 
 #1. Location and chance ActualLocation to Location
